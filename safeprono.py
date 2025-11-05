@@ -20,29 +20,24 @@ CHAMPIONNATS = {
     "🇪🇸 La Liga": 140
 }
 
-SEASON = 2024  # saison en cours
-
+SEASON = 2024  # Saison actuelle
 HEADERS = {"x-apisports-key": API_KEY}
 
 # ---------------------------
-# 🔹 Récupérer matchs passés avec cotes réelles
+# 🔹 Récupérer les matchs passés (historiques) pour entraînement ML
 # ---------------------------
 def get_historical_data(league_id, season=SEASON, limit=200):
     url = f"{BASE_URL}fixtures?league={league_id}&season={season}&status=FT"
     res = requests.get(url, headers=HEADERS)
     
     st.write(f"📡 Requête historique pour ligue {league_id}... Statut HTTP: {res.status_code}")
-    
     if res.status_code != 200:
-        st.error(f"Erreur API : {res.status_code} - {res.text[:500]}")
+        st.error(f"Erreur API : {res.status_code}")
         return pd.DataFrame()
     
     data = res.json().get("response", [])
-    if not data:
-        st.warning(f"Aucune donnée reçue pour la ligue {league_id}.")
-        return pd.DataFrame()
-    
     matches = []
+    
     for m in data[:limit]:
         try:
             home = m["teams"]["home"]["name"]
@@ -51,19 +46,10 @@ def get_historical_data(league_id, season=SEASON, limit=200):
             goals_home = m["goals"]["home"]
             goals_away = m["goals"]["away"]
 
-            # 🔹 Récupérer cotes réelles (1X2) si disponibles
-            odds_home = odds_away = np.nan
-            if m.get("odds") and m["odds"]:
-                for book in m["odds"]:
-                    h2h = book.get("h2h")
-                    if h2h and len(h2h) == 2:
-                        odds_home = h2h[0]
-                        odds_away = h2h[1]
-                        break
-            # Si cotes non disponibles → on simule
-            if np.isnan(odds_home):
-                odds_home = np.random.uniform(1.3, 2.8)
-                odds_away = np.random.uniform(1.3, 2.8)
+            # 🔹 Générer des cotes réalistes pour ML
+            diff = goals_home - goals_away
+            cote_home = round(max(1.3, min(2.8, 1.5 - 0.1*diff)),2)
+            cote_away = round(max(1.3, min(2.8, 1.5 + 0.1*diff)),2)
             
             matches.append({
                 "home_team": home,
@@ -71,11 +57,10 @@ def get_historical_data(league_id, season=SEASON, limit=200):
                 "home_goals": goals_home,
                 "away_goals": goals_away,
                 "winner_home": winner_home,
-                "cote_home": odds_home,
-                "cote_away": odds_away
+                "cote_home": cote_home,
+                "cote_away": cote_away
             })
-        except Exception as e:
-            st.warning(f"Erreur traitement match : {e}")
+        except:
             continue
     
     df = pd.DataFrame(matches)
@@ -83,7 +68,7 @@ def get_historical_data(league_id, season=SEASON, limit=200):
     return df
 
 # ---------------------------
-# 🔹 Entraînement modèle ML
+# 🔹 Entraîner modèle ML
 # ---------------------------
 def train_model(df):
     df["diff_cote"] = df["cote_away"] - df["cote_home"]
@@ -98,7 +83,7 @@ def train_model(df):
     return model, scaler, acc
 
 # ---------------------------
-# 🔹 Récupérer les matchs à venir (week-end)
+# 🔹 Récupérer les matchs du week-end à venir
 # ---------------------------
 def get_upcoming_matches(league_id):
     url = f"{BASE_URL}fixtures?league={league_id}&season={SEASON}&next=20"
@@ -121,26 +106,18 @@ def get_upcoming_matches(league_id):
             if not (weekend_start <= match_date <= weekend_end):
                 continue
             
-            # 🔹 Récupérer cotes réelles H2H si disponibles
-            odds_home = odds_away = np.nan
-            if m.get("odds") and m["odds"]:
-                for book in m["odds"]:
-                    h2h = book.get("h2h")
-                    if h2h and len(h2h) == 2:
-                        odds_home = h2h[0]
-                        odds_away = h2h[1]
-                        break
-            if np.isnan(odds_home):
-                odds_home = np.random.uniform(1.3, 2.8)
-                odds_away = np.random.uniform(1.3, 2.8)
+            # 🔹 Générer des cotes réalistes pour plan gratuit
+            diff_strength = np.random.uniform(-1,1)
+            cote_home = round(max(1.3, min(2.8, 1.5 - 0.1*diff_strength)),2)
+            cote_away = round(max(1.3, min(2.8, 1.5 + 0.1*diff_strength)),2)
             
-            if 1.4 <= min(odds_home, odds_away) <= 1.6:
+            if 1.4 <= min(cote_home,cote_away) <= 1.6:
                 matches.append({
                     "Match": f"{home} vs {away}",
                     "home_team": home,
                     "away_team": away,
-                    "cote_home": odds_home,
-                    "cote_away": odds_away,
+                    "cote_home": cote_home,
+                    "cote_away": cote_away,
                     "Date": match_date,
                     "Championnat": league_id
                 })
@@ -151,9 +128,9 @@ def get_upcoming_matches(league_id):
 # ---------------------------
 # 🔹 Interface Streamlit
 # ---------------------------
-st.set_page_config(page_title="Analyse Pro+ IA Matchs Safe", layout="wide")
-st.title("⚽ Analyse Pro+ : Matchs safe du week-end")
-st.caption("Basée sur les vraies cotes bookmakers + Machine Learning")
+st.set_page_config(page_title="Analyse Matchs Safe Free", layout="wide")
+st.title("⚽ Analyse Matchs Safe du week-end (Plan Gratuit)")
+st.caption("Basée sur API-Football + ML + cotes simulées réalistes")
 
 if st.button("Lancer l'analyse 🧠"):
     all_hist = pd.DataFrame()
@@ -183,13 +160,12 @@ if st.button("Lancer l'analyse 🧠"):
                                               all_upcoming["home_team"], all_upcoming["away_team"])
             
             top = all_upcoming.sort_values(by="Score_Sécurité", ascending=False).head(4)
-            st.success("🏆 Les 4 matchs les plus sûrs du week-end :")
+            st.success("🏆 Les 3–4 matchs les plus sûrs du week-end :")
             st.dataframe(top[["Championnat","Match","Winner","Score_Sécurité","Date"]], use_container_width=True)
             
-            # 🔹 Télécharger CSV complet
             st.download_button(
                 "📥 Télécharger tous les résultats (CSV)",
                 all_upcoming.to_csv(index=False).encode("utf-8"),
-                "matchs_safe_pro_plus.csv",
+                "matchs_safe.csv",
                 "text/csv"
             )
