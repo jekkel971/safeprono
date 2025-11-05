@@ -10,7 +10,9 @@ from sklearn.preprocessing import StandardScaler
 # ---------------------------
 # ⚙️ CONFIG
 # ---------------------------
-API_KEY = "8b95c22ea5fe5a230b130b83e21a7535"  # ta clé API-Football
+import os
+API_KEY = os.getenv("API_KEY")
+
 BASE_URL = "https://v3.football.api-sports.io/"
 HEADERS = {"x-apisports-key": API_KEY}
 
@@ -140,3 +142,4 @@ if st.button("Lancer l’analyse 🧠"):
             top = all_upcoming.head(4)
             st.success("🏆 Les 4 matchs les plus sûrs du week-end :")
             st.dataframe(top[["Championnat", "Match", "Winner", "Score_Sécurité", "Date"]], use_container_width=True)
+
