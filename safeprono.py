@@ -134,3 +134,62 @@ def get_upcoming_matches(league_id):
                 odds_home = np.random.uniform(1.3, 2.8)
                 odds_away = np.random.uniform(1.3, 2.8)
             
+            if 1.4 <= min(odds_home, odds_away) <= 1.6:
+                matches.append({
+                    "Match": f"{home} vs {away}",
+                    "home_team": home,
+                    "away_team": away,
+                    "cote_home": odds_home,
+                    "cote_away": odds_away,
+                    "Date": match_date,
+                    "Championnat": league_id
+                })
+        except:
+            continue
+    return pd.DataFrame(matches)
+
+# ---------------------------
+# 🔹 Interface Streamlit
+# ---------------------------
+st.set_page_config(page_title="Analyse Pro+ IA Matchs Safe", layout="wide")
+st.title("⚽ Analyse Pro+ : Matchs safe du week-end")
+st.caption("Basée sur les vraies cotes bookmakers + Machine Learning")
+
+if st.button("Lancer l'analyse 🧠"):
+    all_hist = pd.DataFrame()
+    for nom, league_id in CHAMPIONNATS.items():
+        hist = get_historical_data(league_id)
+        all_hist = pd.concat([all_hist, hist])
+    
+    if all_hist.empty:
+        st.error("⚠️ Aucune donnée historique chargée. Vérifie ta clé API et tes IDs ligues.")
+    else:
+        model, scaler, acc = train_model(all_hist)
+        st.info(f"Modèle entraîné avec précision : {round(acc*100,1)}%")
+        
+        all_upcoming = pd.DataFrame()
+        for nom, league_id in CHAMPIONNATS.items():
+            up = get_upcoming_matches(league_id)
+            up["Championnat"] = nom
+            all_upcoming = pd.concat([all_upcoming, up])
+        
+        if all_upcoming.empty:
+            st.warning("Aucun match safe trouvé pour le week-end.")
+        else:
+            X_pred = scaler.transform(all_upcoming[["cote_home","cote_away","cote_away"]])
+            probs = model.predict_proba(X_pred)[:,1]
+            all_upcoming["Score_Sécurité"] = (1 - abs(all_upcoming["cote_home"]-all_upcoming["cote_away"]))*probs*100
+            all_upcoming["Winner"] = np.where(all_upcoming["cote_home"] < all_upcoming["cote_away"],
+                                              all_upcoming["home_team"], all_upcoming["away_team"])
+            
+            top = all_upcoming.sort_values(by="Score_Sécurité", ascending=False).head(4)
+            st.success("🏆 Les 4 matchs les plus sûrs du week-end :")
+            st.dataframe(top[["Championnat","Match","Winner","Score_Sécurité","Date"]], use_container_width=True)
+            
+            # 🔹 Télécharger CSV complet
+            st.download_button(
+                "📥 Télécharger tous les résultats (CSV)",
+                all_upcoming.to_csv(index=False).encode("utf-8"),
+                "matchs_safe_pro_plus.csv",
+                "text/csv"
+            )
