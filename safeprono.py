@@ -1,90 +1,104 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+
+st.set_page_config(page_title="Analyse Matchs Pro", layout="wide")
+st.title("⚽ Analyse Avancée des Matchs")
+st.caption("Entrez vos matchs, cotes et statistiques pour obtenir les matchs les plus sûrs")
 
 # ---------------------------
-# ⚙️ Clé API (optionnelle, pour test local)
+# Fonction pour calculer score sécurité
 # ---------------------------
-API_KEY = "94ab52893fe364d9bf5362dc7b752213"  # ⚠️ Remplace par ta clé si tu veux tester avec l'API, sinon laisse vide
-
-# ---------------------------
-# 🔹 Championnats
-# ---------------------------
-CHAMPIONNATS = ["🇫🇷 Ligue 1", "🏴 Premier League", "🇪🇸 La Liga"]
-
-# ---------------------------
-# 🔹 Générer des matchs simulés pour le week-end
-# ---------------------------
-def generate_weekend_matches():
-    weekend_start = datetime.now()
-    matches = []
-
-    for champ in CHAMPIONNATS:
-        for i in range(5):  # 5 matchs simulés par championnat
-            home = f"Team_Home_{i+1}"
-            away = f"Team_Away_{i+1}"
-            match_date = weekend_start + timedelta(days=np.random.randint(0,7), hours=np.random.randint(12,22))
-
-            # Cotes simulées réalistes autour de 1.5
-            diff_strength = np.random.uniform(-0.5,0.5)
-            cote_home = round(1.5 - 0.05*diff_strength,2)
-            cote_away = round(1.5 + 0.05*diff_strength,2)
-
-            matches.append({
-                "Championnat": champ,
-                "Match": f"{home} vs {away}",
-                "home_team": home,
-                "away_team": away,
-                "cote_home": cote_home,
-                "cote_away": cote_away,
-                "Date": match_date
-            })
+def calculate_score(df):
+    """
+    Score combinant :
+    - Différence de cotes (favoritisme)
+    - Forme récente pondérée
+    - Différence de buts (optionnelle)
+    """
+    # Différence de cotes (plus petite = plus sûr)
+    df["diff_cote"] = abs(df["cote_home"] - df["cote_away"])
     
-    df = pd.DataFrame(matches)
-    df["Date"] = df["Date"].dt.strftime("%Y-%m-%d %H:%M")  # pour affichage Streamlit
-    return df
-
-# ---------------------------
-# 🔹 Calcul Score Sécurité et Winner
-# ---------------------------
-def calculate_scores(df):
+    # Forme récente
+    df["home_form"] = df["home_wins"]*3 + df["home_draws"]*1 - df["home_losses"]*1
+    df["away_form"] = df["away_wins"]*3 + df["away_draws"]*1 - df["away_losses"]*1
+    
+    # Différence de buts (facultatif)
+    df["goal_diff"] = (df["home_goals_scored"] - df["home_goals_against"]) - (df["away_goals_scored"] - df["away_goals_against"])
+    
+    # Score de sécurité combiné
+    # pondération : 50% cotes, 30% forme, 20% goal_diff
+    df["score_securite"] = (1 - df["diff_cote"]/10)*50 + ((df["home_form"] - df["away_form"])/20)*30 + ((df["goal_diff"]+10)/20)*20
+    
+    # Déterminer vainqueur probable
     df["Winner"] = np.where(df["cote_home"] < df["cote_away"], df["home_team"], df["away_team"])
-    df["Score_Sécurité"] = (1 - abs(df["cote_home"] - df["cote_away"])) * 100
+    
     return df
 
 # ---------------------------
-# 🔹 Streamlit Interface
+# Saisie manuelle via formulaire
 # ---------------------------
-st.set_page_config(page_title="Matchs Safe du Week-end", layout="wide")
-st.title("⚽ Matchs Safe du Week-end (Gratuit)")
-st.caption("Simulation avec cotes réalistes pour test local et classement des matchs les plus sûrs")
-
-# ✅ Bouton avec session_state pour garder l'état
-if "run_analysis" not in st.session_state:
-    st.session_state.run_analysis = False
-
-if st.button("Lancer l'analyse 🧠"):
-    st.session_state.run_analysis = True
-
-if st.session_state.run_analysis:
-    # Générer les matchs
-    df_matches = generate_weekend_matches()
-    st.write(f"📊 Matchs simulés générés : {df_matches.shape[0]}")
+st.header("Ajouter un match")
+with st.form("match_form", clear_on_submit=True):
+    home_team = st.text_input("Équipe Domicile")
+    away_team = st.text_input("Équipe Extérieur")
+    cote_home = st.number_input("Cote Domicile", min_value=1.01, max_value=10.0, value=1.5, step=0.01)
+    cote_away = st.number_input("Cote Extérieur", min_value=1.01, max_value=10.0, value=1.5, step=0.01)
     
-    # Calculer scores et winner
-    df_matches = calculate_scores(df_matches)
+    st.subheader("Historique de l'équipe Domicile")
+    home_wins = st.number_input("Victoires", min_value=0, max_value=50, value=0)
+    home_draws = st.number_input("Nuls", min_value=0, max_value=50, value=0)
+    home_losses = st.number_input("Défaites", min_value=0, max_value=50, value=0)
+    home_goals_scored = st.number_input("Buts marqués", min_value=0, max_value=200, value=0)
+    home_goals_against = st.number_input("Buts encaissés", min_value=0, max_value=200, value=0)
+    
+    st.subheader("Historique de l'équipe Extérieur")
+    away_wins = st.number_input("Victoires", min_value=0, max_value=50, value=0)
+    away_draws = st.number_input("Nuls", min_value=0, max_value=50, value=0)
+    away_losses = st.number_input("Défaites", min_value=0, max_value=50, value=0)
+    away_goals_scored = st.number_input("Buts marqués", min_value=0, max_value=200, value=0)
+    away_goals_against = st.number_input("Buts encaissés", min_value=0, max_value=200, value=0)
+    
+    submitted = st.form_submit_button("Ajouter le match")
+    
+    if submitted:
+        if "matches" not in st.session_state:
+            st.session_state.matches = []
+        st.session_state.matches.append({
+            "home_team": home_team,
+            "away_team": away_team,
+            "cote_home": cote_home,
+            "cote_away": cote_away,
+            "home_wins": home_wins,
+            "home_draws": home_draws,
+            "home_losses": home_losses,
+            "home_goals_scored": home_goals_scored,
+            "home_goals_against": home_goals_against,
+            "away_wins": away_wins,
+            "away_draws": away_draws,
+            "away_losses": away_losses,
+            "away_goals_scored": away_goals_scored,
+            "away_goals_against": away_goals_against
+        })
+        st.success(f"Match {home_team} vs {away_team} ajouté !")
 
-    # Top 3–4 matchs les plus sûrs
-    top = df_matches.sort_values(by="Score_Sécurité", ascending=False).head(4)
-    st.success("🏆 Les 3–4 matchs les plus sûrs du week-end :")
-    st.dataframe(top[["Championnat","Match","Winner","Score_Sécurité","Date"]], use_container_width=True)
-
-    # Télécharger CSV complet
+# ---------------------------
+# Analyse et affichage
+# ---------------------------
+if "matches" in st.session_state and len(st.session_state.matches) > 0:
+    df = pd.DataFrame(st.session_state.matches)
+    df = calculate_score(df)
+    
+    st.header("Analyse des Matchs")
+    st.dataframe(df[["home_team","away_team","cote_home","cote_away","Winner","score_securite"]].sort_values(by="score_securite", ascending=False))
+    
+    st.subheader("🏆 Top 3–4 Matchs les plus sûrs")
+    top = df.sort_values(by="score_securite", ascending=False).head(4)
+    st.dataframe(top[["home_team","away_team","Winner","score_securite"]])
+    
     st.download_button(
-        "📥 Télécharger tous les résultats (CSV)",
-        df_matches.to_csv(index=False).encode("utf-8"),
-        "matchs_safe_local.csv",
+        "📥 Télécharger les résultats en CSV",
+        df.to_csv(index=False).encode("utf-8"),
+        "matchs_analyse_pro.csv",
         "text/csv"
     )
-
