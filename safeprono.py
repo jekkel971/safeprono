@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # ---------------------------
 # ⚙️ Clé API (optionnelle, pour test local)
 # ---------------------------
-API_KEY = "TA_CLE_API_ICI"  # ⚠️ Remplace par ta clé si tu veux tester avec l'API, sinon laisse vide
+API_KEY = "94ab52893fe364d9bf5362dc7b752213"  # ⚠️ Remplace par ta clé si tu veux tester avec l'API, sinon laisse vide
 
 # ---------------------------
 # 🔹 Championnats
@@ -87,3 +87,4 @@ if st.session_state.run_analysis:
         "matchs_safe_local.csv",
         "text/csv"
     )
+
