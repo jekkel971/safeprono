@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # ---------------------------
 # ⚙️ Clé API directement dans le code
 # ---------------------------
-API_KEY = "8b95c22ea5fe5a230b130b83e21a7535"  # ⚠️ Remplace par ta clé API
+API_KEY = "94ab52893fe364d9bf5362dc7b752213"  # ⚠️ Remplace par ta clé API
 
 # ---------------------------
 # 🔹 Championnats
@@ -42,3 +42,4 @@ def generate_weekend_matches():
                 "Date": match_date
             })
     return pd.DataFrame(matches)
+
